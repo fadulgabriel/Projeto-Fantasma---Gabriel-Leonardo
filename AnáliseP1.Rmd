@@ -1,0 +1,116 @@
+---
+title: "Análise 1 PS-ESTAT"
+author: "Gabriel Leonardo Fadul"
+date: "2023-10-12"
+output: html_document
+---
+#ANÁLISE PARCIAL 1 - comandos
+
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+devolucao <- read.csv("devolução.csv")
+library(tidyverse)
+library(hms)
+library(lubridate)
+```
+
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+
+#tirando os itens repetidos das vendas
+```{r}
+duplicadas <- vendas[duplicated(vendas$Product.ID), ]
+vendas<- vendas %>%
+  distinct(Product.ID, .keep_all = TRUE)
+```
+
+
+#tabela de freq com faturamento por categoria de roupa
+```{r}
+tabela <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Price))%>%
+  group_by(Category)%>%
+  summarize(Faturamento = sum(Price))%>%
+  mutate(prop= round(100 * (Faturamento/sum(Faturamento)), 2))
+```
+
+
+#quadro resumo das categorias de roupa
+```{r}
+quadro_resumo <- vendas %>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Category))%>%
+  group_by(Category) %>%
+  summarize(Média = round(mean(Price),2),
+            `Desvio Padrão` = round(sd(Price),2),
+            `Variância` = round(var(Price),2),
+            `Mínimo` = round(min(Price),2),
+            `1º Quartil` = round(quantile(Price, probs = .25),2),
+            Mediana = round(quantile(Price, probs = .5),2),
+            `3º Quartil` = round(quantile(Price, probs = .75),2),
+            `Máximo` = round(max(Price),2)) %>% t() %>% as.data.frame() %>%
+  mutate(V1 = str_replace(V1,"\\.",","))
+  
+xtable::xtable(quadro_resumo)
+```
+
+
+#faturamento mensal por categoria
+```{r}
+vendas <- vendas%>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Data.Venda))%>%
+  mutate(data= mdy(Data.Venda))%>%
+  mutate(mes= month(data, label = T, locale = "pt_BR"))
+
+mensal <- vendas%>%
+  group_by(mes, Category)%>%
+  summarize(faturamento= sum(Price))%>%
+  rename(categoria = Category)
+mensal$categoria[mensal$categoria == "Kids' Fashion"] <- "Infantil"
+mensal$categoria[mensal$categoria == "Men's Fashion"] <- "Masculino"
+mensal$categoria[mensal$categoria == "Women's Fashion"] <- "Feminino"
+
+```
+
+
+#grafico de faturamento por categoria em cada mês
+```{r}
+ggplot(mensal) +
+  aes(x = mes, y = faturamento , group = categoria, colour = categoria) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Faturamento", color = "Categoria") +
+  theme_estat()
+ggsave("grafico_mensal.png", width = 158, height = 93, units = "mm")
+```
+
+
