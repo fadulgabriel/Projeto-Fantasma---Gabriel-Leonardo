@@ -1,0 +1,94 @@
+---
+title: "Análise Parcial 2"
+author: "Gabriel Leonardo Fadul"
+date: "2023-10-21"
+output: ioslides_presentation
+---
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+devolucao <- read.csv("devolução.csv")
+```
+
+```{r} 
+library(tidyverse)
+library(hms)
+library(lubridate)
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+duplicadas <- vendas[duplicated(vendas$Unique.ID), ]
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#faturamento por marca
+```{r}
+tabela <- vendas%>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Brand))%>%
+  group_by(Brand)%>%
+  summarize(Faturamento = sum(Price))%>%
+  mutate(prop= paste(round(100 * (Faturamento/sum(Faturamento)), 2), "%"))
+```
+
+#boxplot variacao de preco por marca
+```{r}
+marcas <- vendas%>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Brand))
+ggplot(marcas) +
+  aes(x = Brand , y = Price) +
+  geom_boxplot(fill = c("#A11D21"), width = 0.5) +
+  stat_summary (fun = "mean", geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(x = "Marcas", y = "Preço (em dólares)") +
+  theme_estat ()
+ggsave("boxplot_AP2.png", width = 158, height = 93, units = "mm")
+```
+
+#histograma dos precos por marca
+```{r}
+ggplot (marcas) +
+aes(x=Price) +
+geom_histogram (colour ="white", fill="#A11D21", binwidth =7)+
+facet_wrap(Brand ~.) +
+labs(x="Preço (em dólares)", y="Frequência") +
+theme_estat(strip.text = element_text(size=12), strip.background = element_rect( colour ="black", fill="white"))
+ggsave("histograma_AP2.png", width = 158, height = 93, units = "mm")
+```
+
+#tabela dos preços
+```{r}
+tamn <- marcas%>%
+  group_by(Brand, Size)%>%
+  summarise(media_preco = mean(Price))%>%
+  filter(!is.na(Size))
+```
+
