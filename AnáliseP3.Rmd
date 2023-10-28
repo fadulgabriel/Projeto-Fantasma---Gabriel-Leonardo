@@ -1,0 +1,151 @@
+---
+title: "AnáliseP3"
+author: "Gabriel Leonardo Fadul"
+date: "2023-10-23"
+output: html_document
+---
+#Análise Parcial 3
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+library(tidyverse)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#dividir os bancos em masculino, feminino e unisex
+```{r}
+masc <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Color))%>%
+  filter(Category == "Men's Fashion") 
+fem <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Color))%>%
+  filter(Category == "Women's Fashion")
+
+unisex <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na((Color)))%>%
+  filter(Category != "Kids' Fashion")
+```
+
+#grafico de setor das cores (masculino)
+```{r}
+pizza_masc <- masc %>% 
+  group_by(Color) %>%
+  summarise(Freq = n()) %>%
+  mutate(Prop = round(100*(Freq/sum(Freq)), 2)) %>%
+  arrange(desc(Color)) %>%
+  mutate(posicao = cumsum(Prop) - 0.5*Prop)
+
+ggplot(pizza_masc) +
+  aes(x = factor(""), y = Prop , fill = factor(Color)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  geom_text(aes(x = 1.8, y = posicao, label = paste0(Prop, "%")),color = "black") +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = cores_estat, name = 'Cor')
+```
+
+#gráfico setores das cores (feminino)
+```{r}
+pizza_fem <- fem %>% 
+  group_by(Color) %>%
+  summarise(Freq = n()) %>%
+  mutate(Prop = round(100*(Freq/sum(Freq)), 2)) %>%
+  arrange(desc(Color)) %>%
+  mutate(posicao = cumsum(Prop) - 0.5*Prop)
+
+ggplot(pizza_fem) +
+  aes(x = factor(""), y = Prop , fill = factor(Color)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  geom_text(aes(x = 1.8, y = posicao, label = paste0(Prop, "%")),color = "black") +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = cores_estat, name = 'Cor')
+```
+
+#gráfico de barras categoria por marca
+```{r}
+barras <- unisex %>%
+  mutate(Category = case_when(
+    Category %>% str_detect("Men's Fashion") ~ "Masculino", 
+    Category %>% str_detect("Women's Fashion") ~ "Feminino")) %>%
+  mutate(Color = case_when(
+    Color %>% str_detect("Black") ~ "Preto", 
+    Color %>% str_detect("Yellow") ~ "Amarelo",
+    Color %>% str_detect("Blue") ~ "Azul", 
+    Color %>% str_detect("White") ~ "Branco",
+    Color %>% str_detect("Green") ~ "Verde", 
+    Color %>% str_detect("Red") ~ "Vermelho"))%>%
+  group_by(Category, Color) %>%
+  summarise(freq = n()) %>%
+  group_by(Color)%>%
+  mutate(freq_relativa = round(100 * (freq/sum(freq)), 2))
+
+colnames(barras)[colnames(barras) == "Color"] <- "Cor"
+colnames(barras)[colnames(barras) == "Category"] <- "Categoria"
+porcentagens <- str_c(barras$freq_relativa, "%") %>% str_replace("\\.", ",")
+legendas <- str_squish(str_c(barras$freq, " (", porcentagens, ")"))
+
+ggplot(barras) +
+  aes(
+    x = fct_reorder(Cor, freq_relativa, .desc = F), y = freq,
+    fill = Categoria, label = legendas) +
+  geom_col(position = position_dodge2(preserve = "single", padding = 0)) +
+  geom_text(
+    position = position_dodge(width = .9),
+    vjust = -0.5, hjust = 0.5,
+    size = 2.1
+  ) +
+  labs(x = "Cor", y = "Frequência") +
+  theme_estat() 
+ggsave("grfc_AP3.png", width = 158, height = 93, units = "mm")
+```
+
+#coeficiente de contigência V de Cramer
+```{r}
+library(vcd)
+cores_especificas <- unisex%>%
+  filter(Color %in% c("Yellow", "White", "Black"))
+tabela_cont <- table(cores_especificas$Color, cores_especificas$Category)
+cramer <- assocstats(tabela_cont)$cramer
+cramer
+tabela_cont
+```
+
