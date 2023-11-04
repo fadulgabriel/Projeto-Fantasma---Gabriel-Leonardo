@@ -1,0 +1,100 @@
+---
+title: "AnáliseP4"
+author: "Gabriel Leonardo Fadul"
+date: "2023-11-04"
+output: html_document
+---
+#Análise Parcial 4
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+library(tidyverse)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#grafico dispersao da avaliacao por preço
+```{r}
+vendas <- vendas%>%
+  filter(!is.na(Rating))%>%
+  filter(!is.na(Price))
+ggplot(vendas) +
+  aes(x = Price, y = Rating) +
+  geom_point(colour = "#A11D21", size = 3, alpha = 0.3) + 
+  labs(
+    x = "Preço (em reais)",
+    y = "Avaliação"
+  ) +
+  theme_estat()
+ggsave("grfc_AP4.png", width = 158, height = 93, units = "mm")
+```
+
+#quadro medidas resumo
+```{r}
+quadro_resumo <- vendas %>% 
+  summarize(Média = round(mean(Rating),2),
+            `Desvio Padrão` = round(sd(Rating),2),
+            `Variância` = round(var(Rating),2),
+            `Mínimo` = round(min(Rating),2),
+            `1º Quartil` = round(quantile(Rating, probs = .25),2),
+            Mediana = round(quantile(Rating, probs = .5),2),
+            `3º Quartil` = round(quantile(Rating, probs = .75),2),
+            `Máximo` = round(max(Rating),2)) %>% t() %>% as.data.frame() %>% 
+  mutate(V1 = str_replace(V1,"\\.",",")) 
+xtable::xtable(quadro_resumo)
+```
+
+#histograma
+```{r}
+ggplot(vendas) +
+  aes(x = Rating) +
+  geom_histogram(colour = "white", fill = "#A11D21", binwidth = 0.2) +
+  labs(x = "Avaliação", y = "Frequência Absoluta") +
+  theme_estat()
+ggsave("grfc(2)_AP4.png", width = 158, height = 93, units = "mm")
+```
+
+#assimetria da avaliacao
+```{r}
+library(e1071)
+assimetria <- vendas%>%
+  summarise(assimetria = skewness(Rating))
+```
+
+#correlacao de pearson
+```{r}
+pearson <- cor(vendas$Rating, vendas$Price)
+```
+
