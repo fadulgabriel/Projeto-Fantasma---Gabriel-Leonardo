@@ -1,0 +1,620 @@
+---
+title: "Projeto Fantasma - Comandos"
+author: "Gabriel Leonardo Fadul"
+date: "2023-11-23"
+output: html_document
+---
+#ANÁLISE PARCIAL 1
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+library(tidyverse)
+library(lubridate)
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+duplicadas <- vendas[duplicated(vendas$Unique.ID), ]
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#tabela de freq com faturamento por categoria de roupa
+```{r}
+tabela <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Price))%>%
+  group_by(Category)%>%
+  summarize(Faturamento = sum(Price))%>%
+  mutate(prop= round(100 * (Faturamento/sum(Faturamento)), 2))
+```
+
+#quadro resumo das categorias de roupa
+```{r}
+quadro_resumo <- vendas %>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Category))%>%
+  group_by(Category) %>%
+  summarize(Média = round(mean(Price),2),
+            `Desvio Padrão` = round(sd(Price),2),
+            `Variância` = round(var(Price),2),
+            `Mínimo` = round(min(Price),2),
+            `1º Quartil` = round(quantile(Price, probs = .25),2),
+            Mediana = round(quantile(Price, probs = .5),2),
+            `3º Quartil` = round(quantile(Price, probs = .75),2),
+            `Máximo` = round(max(Price),2)) %>% t() %>% as.data.frame() %>%
+
+xtable::xtable(quadro_resumo)
+```
+
+#faturamento mensal por categoria
+```{r}
+vendas <- vendas%>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Data.Venda))%>%
+  mutate(data= mdy(Data.Venda))%>%
+  mutate(mes= month(data, label = T, locale = "pt_BR"))
+
+mensal <- vendas%>%
+  group_by(mes, Category)%>%
+  summarize(faturamento= sum(Price))%>%
+  rename(categoria = Category)
+mensal$categoria[mensal$categoria == "Kids' Fashion"] <- "Infantil"
+mensal$categoria[mensal$categoria == "Men's Fashion"] <- "Masculino"
+mensal$categoria[mensal$categoria == "Women's Fashion"] <- "Feminino"
+
+```
+
+#grafico de faturamento por categoria em cada mês
+```{r}
+ggplot(mensal) +
+  aes(x = mes, y = faturamento , group = categoria, colour = categoria) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(x = "Mês", y = "Faturamento (em reais)", color = "Categoria") +
+  theme_estat() + scale_y_continuous(limits = c(252,4000))
+ggsave("grfc_AP1.png", width = 158, height = 93, units = "mm")
+```
+
+#Análise Parcial 2
+
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+devolucao <- read.csv("devolução.csv")
+```
+
+```{r} 
+library(tidyverse)
+library(e1071)
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+duplicadas <- vendas[duplicated(vendas$Unique.ID), ]
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#faturamento por marca
+```{r}
+tabela <- vendas%>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Brand))%>%
+  group_by(Brand)%>%
+  summarize(Faturamento = sum(Price))%>%
+  mutate(prop= paste(round(100 * (Faturamento/sum(Faturamento)), 2), "%"))
+```
+
+#boxplot variacao de preco por marca
+```{r}
+marcas <- vendas%>%
+  filter(!is.na(Price))%>%
+  filter(!is.na(Brand))
+ggplot(marcas) +
+  aes(x = Brand , y = Price) +
+  geom_boxplot(fill = c("#A11D21"), width = 0.5) +
+  stat_summary (fun = "mean", geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(x = "Marcas", y = "Preço (em reais)") +
+  theme_estat ()
+ggsave("grfc_AP2.png", width = 158, height = 93, units = "mm")
+```
+
+#histograma dos precos por marca
+```{r}
+ggplot (marcas) +
+aes(x=Price) +
+geom_histogram (colour ="white", fill="#A11D21", binwidth =7)+
+facet_wrap(Brand ~.) +
+labs(x="Preço (em reais)", y="Frequência") +
+theme_estat(strip.text = element_text(size=12), strip.background = element_rect( colour ="black", fill="white"))
+ggsave("grfc(2)_AP2.png", width = 158, height = 93, units = "mm")
+```
+
+#quadro medidas resumo dos preços por marca
+```{r}
+quadro <- marcas%>%
+  group_by(Brand)%>%
+  summarize(Média = round(mean(Price),2),
+            `Desvio Padrão` = round(sd(Price),2),
+            `Variância` = round(var(Price),2),
+            `Mínimo` = round(min(Price),2),
+            `1º Quartil` = round(quantile(Price, probs = .25),2),
+            Mediana = round(quantile(Price, probs = .5),2),
+            `3º Quartil` = round(quantile(Price, probs = .75),2),
+            `Máximo` = round(max(Price),2)) %>% t() %>% as.data.frame() %>%
+  mutate(V1 = str_replace(V1,"\\.",","))
+```
+
+#coeficientes de assimetria
+```{r}
+assimetria <- marcas%>%
+  group_by(Brand)%>%
+  summarise(assimetria = skewness(Price))
+```
+
+#Análise Parcial 3
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+library(tidyverse)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#dividir os bancos em masculino, feminino e unisex
+```{r}
+masc <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Color))%>%
+  filter(Category == "Men's Fashion") 
+fem <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na(Color))%>%
+  filter(Category == "Women's Fashion")
+
+unisex <- vendas%>%
+  filter(!is.na(Category))%>%
+  filter(!is.na((Color)))%>%
+  filter(Category != "Kids' Fashion")
+```
+
+#grafico de setor das cores (masculino)
+```{r}
+pizza_masc <- masc %>% 
+  group_by(Color) %>%
+  summarise(Freq = n()) %>%
+  mutate(Prop = round(100*(Freq/sum(Freq)), 2)) %>%
+  arrange(desc(Color)) %>%
+  mutate(posicao = cumsum(Prop) - 0.5*Prop)
+
+ggplot(pizza_masc) +
+  aes(x = factor(""), y = Prop , fill = factor(Color)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  geom_text(aes(x = 1.8, y = posicao, label = paste0(Prop, "%")),color = "black") +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = cores_estat, name = 'Cor')
+```
+
+#gráfico setores das cores (feminino)
+```{r}
+pizza_fem <- fem %>% 
+  group_by(Color) %>%
+  summarise(Freq = n()) %>%
+  mutate(Prop = round(100*(Freq/sum(Freq)), 2)) %>%
+  arrange(desc(Color)) %>%
+  mutate(posicao = cumsum(Prop) - 0.5*Prop)
+
+ggplot(pizza_fem) +
+  aes(x = factor(""), y = Prop , fill = factor(Color)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  geom_text(aes(x = 1.8, y = posicao, label = paste0(Prop, "%")),color = "black") +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = cores_estat, name = 'Cor')
+```
+
+#gráfico de barras categoria por marca
+```{r}
+barras <- unisex %>%
+  mutate(Category = case_when(
+    Category %>% str_detect("Men's Fashion") ~ "Masculino", 
+    Category %>% str_detect("Women's Fashion") ~ "Feminino")) %>%
+  mutate(Color = case_when(
+    Color %>% str_detect("Black") ~ "Preto", 
+    Color %>% str_detect("Yellow") ~ "Amarelo",
+    Color %>% str_detect("Blue") ~ "Azul", 
+    Color %>% str_detect("White") ~ "Branco",
+    Color %>% str_detect("Green") ~ "Verde", 
+    Color %>% str_detect("Red") ~ "Vermelho"))%>%
+  group_by(Category, Color) %>%
+  summarise(freq = n()) %>%
+  group_by(Color)%>%
+  mutate(freq_relativa = round(100 * (freq/sum(freq)), 2))
+
+colnames(barras)[colnames(barras) == "Color"] <- "Cor"
+colnames(barras)[colnames(barras) == "Category"] <- "Categoria"
+porcentagens <- str_c(barras$freq_relativa, "%") %>% str_replace("\\.", ",")
+legendas <- str_squish(str_c(barras$freq, " (", porcentagens, ")"))
+
+ggplot(barras) +
+  aes(
+    x = fct_reorder(Cor, freq_relativa, .desc = F), y = freq,
+    fill = Categoria, label = legendas) +
+  geom_col(position = position_dodge2(preserve = "single", padding = 0)) +
+  geom_text(
+    position = position_dodge(width = .9),
+    vjust = -0.5, hjust = 0.5,
+    size = 2.1
+  ) +
+  labs(x = "Cor", y = "Frequência") +
+  theme_estat() 
+ggsave("grfc_AP3.png", width = 158, height = 93, units = "mm")
+```
+
+#coeficiente de contigência V de Cramer + tabela das cores por categoria 
+```{r}
+library(vcd)
+tabela_cont <- table(unisex$Color, unisex$Category)
+cramer <- assocstats(tabela_cont)$cramer
+cramer
+tabela_cont
+```
+
+#Análise Parcial 4
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+library(tidyverse)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+```
+
+#tema da estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#grafico dispersao da avaliacao por preço
+```{r}
+vendas <- vendas%>%
+  filter(!is.na(Rating))%>%
+  filter(!is.na(Price))
+ggplot(vendas) +
+  aes(x = Price, y = Rating) +
+  geom_point(colour = "#A11D21", size = 3, alpha = 0.3) + 
+  labs(
+    x = "Preço (em reais)",
+    y = "Avaliação"
+  ) +
+  theme_estat()
+ggsave("grfc_AP4.png", width = 158, height = 93, units = "mm")
+```
+
+#quadro medidas resumo
+```{r}
+quadro_resumoRating <- vendas %>% 
+  summarize(Média = round(mean(Rating),2),
+            `Desvio Padrão` = round(sd(Rating),2),
+            `Variância` = round(var(Rating),2),
+            `Mínimo` = round(min(Rating),2),
+            `1º Quartil` = round(quantile(Rating, probs = .25),2),
+            `Mediana` = round(quantile(Rating, probs = .5),2),
+            `3º Quartil` = round(quantile(Rating, probs = .75),2),
+            `Máximo` = round(max(Rating),2)) %>% t() %>% as.data.frame() %>% 
+  mutate(V1 = str_replace(V1,"\\.",",")) 
+xtable::xtable(quadro_resumoRating)
+
+quadro_resumoPrice <- vendas %>% 
+  summarize(Média = round(mean(Price),2),
+            `Desvio Padrão` = round(sd(Price),2),
+            `Variância` = round(var(Price),2),
+            `Mínimo` = round(min(Price),2),
+            `1º Quartil` = round(quantile(Price, probs = .25),2),
+            Mediana = round(quantile(Price, probs = .5),2),
+            `3º Quartil` = round(quantile(Price, probs = .75),2),
+            `Máximo` = round(max(Price),2)) %>% t() %>% as.data.frame() %>% 
+  mutate(V1 = str_replace(V1,"\\.",",")) 
+xtable::xtable(quadro_resumoPrice)
+```
+
+#histogramas
+```{r}
+vendas <- vendas%>%
+  filter(!is.na(Rating))%>%
+  filter(!is.na(Price))
+ggplot(vendas) +
+  aes(x = Rating) +
+  geom_histogram(colour = "white", fill = "#A11D21", binwidth = 0.2) +
+  labs(x = "Avaliação", y = "Frequência Absoluta") +
+  theme_estat()
+ggsave("grfc(2)_AP4.png", width = 158, height = 93, units = "mm")
+
+ggplot(vendas) +
+  aes(x = Price) +
+  geom_histogram(colour = "white", fill = "#A11D21", binwidth = 7) +
+  labs(x = "Preço (em reais)", y = "Frequência Absoluta") +
+  theme_estat()
+ggsave("grfc(3)_AP4.png", width = 158, height = 93, units = "mm")
+
+```
+
+#assimetrias
+```{r}
+library(e1071)
+assimetria_rating <- vendas%>%
+  summarise(assimetria = skewness(Rating))
+assimetria_price <- vendas%>%
+  summarise(assimetria = skewness(Price))
+```
+
+#correlacao de pearson
+```{r}
+pearson <- cor(vendas$Rating, vendas$Price)
+```
+
+#Análise Parcial 5
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+devolucao <- read.csv("devolução_atualizado.csv")
+library(tidyverse)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+```
+
+#tema estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
+
+#tirando os itens repetidos das vendas
+```{r}
+vendas<- vendas %>%
+  distinct(Unique.ID, .keep_all = TRUE)
+```
+
+#juntando os bancos
+```{r}
+x <- vendas%>%
+  select(Brand, Unique.ID)
+motivos <- left_join(x, devolucao, by = "Unique.ID")
+motivos <- motivos%>%
+  filter(!is.na(Motivo.devolução))%>%
+  filter(!is.na(Brand))
+```
+
+#tabela simples
+```{r}
+tabela <- table(motivos$Brand, motivos$Motivo.devolução)
+tabela
+```
+
+#agrupando por marca
+```{r}
+marcas <- motivos%>%
+  filter(!is.na(Brand))%>%
+  group_by(Brand, Motivo.devolução)%>%
+  summarise(Freq = n())
+```
+
+#grafico pizza para cada marca
+```{r}
+marcas <- motivos%>%
+  filter(!is.na(Brand))%>%
+  group_by(Brand, Motivo.devolução)%>%
+  summarise(Freq = n())%>%
+  mutate(Prop = round(100*(Freq/sum(Freq)), 2)) %>%
+  arrange(desc(Motivo.devolução)) %>%
+  mutate(posicao = cumsum(Prop) - 0.5*Prop)
+
+ggplot(marcas) +
+  aes(x = factor(""), y = Prop , fill = factor(Motivo.devolução)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") + facet_wrap(Brand ~.) +
+  geom_text(aes(x = 1.8, y = posicao, label = paste0(Prop, "%")), color = "black", size = 2.1) +
+  theme_void() +
+  theme(legend.position = "top") +
+  scale_fill_manual(values = cores_estat, name = 'Motivo das devoluções') 
+ggsave("grfc_AP5.png", width = 158, height = 93, units = "mm")
+```
+
+#grafico de barras devolucao por marca
+```{r}
+barras <- motivos %>%
+  group_by(Brand, Motivo.devolução) %>%
+  summarise(freq = n()) %>%
+  group_by(Motivo.devolução)%>%
+  mutate(freq_relativa = round(100 * (freq/sum(freq)), 2))
+
+colnames(barras)[colnames(barras) == "Brand"] <- "Marca"
+colnames(barras)[colnames(barras) == "Motivo.devolução"] <- "Motivos"
+
+porcentagens <- str_c(barras$freq_relativa, "%") %>% str_replace("\\.", ",")
+legendas <- str_squish(str_c(barras$freq, " (", porcentagens, ")"))
+
+ggplot(barras) +
+  aes(
+    x = fct_reorder(Marca, freq_relativa, .desc = F), y = freq,
+    fill = Motivos, label = legendas) +
+  geom_col(position = position_dodge2(preserve = "single", padding = 0)) +
+  geom_text(
+    position = position_dodge(width = .9),
+    vjust = -0.5, hjust = 0.5,
+    size = 1.5
+  ) +
+  labs(x = "Marca", y = "Frequência") +
+  theme_estat() 
+ggsave("grfc(2)_AP5.png", width = 158, height = 93, units = "mm")
+```
+
+#Análise Parcial 6 (extra)
+
+#baixando e pegando os pacotes e banco de dados
+```{r}
+vendas<- read.csv("vendas.csv")
+library(tidyverse)
+library(conflicted)
+conflict_prefer("filter", "dplyr")
+```
+
+#tema estat
+```{r}
+cores_estat <- c("#A11D21", "#003366", "#CC9900", "#663333", "#FF6600", "#CC9966", "#999966", "#006606", "#008091", "#041835", "#666666")
+theme_estat <- function(...) {
+    theme <- ggplot2::theme_bw() +
+        ggplot2::theme(
+            axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+            axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+            axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+            panel.border = ggplot2::element_blank(),
+            axis.line = ggplot2::element_line(colour = "black"),
+            legend.position = "top",
+            ...
+        )
+
+    return(
+        list(
+            theme,
+            scale_fill_manual(values = cores_estat),
+            scale_colour_manual(values = cores_estat)
+        )
+    )
+}
+```
